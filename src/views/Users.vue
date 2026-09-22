@@ -1,0 +1,235 @@
+<script setup>
+import { onMounted, ref } from 'vue'
+import Button from 'primevue/button'
+import InputText from 'primevue/inputtext'
+import Password from 'primevue/password'
+import DataTable from 'primevue/datatable'
+import Column from 'primevue/column'
+import Dialog from 'primevue/dialog'
+import Select from 'primevue/select'
+import Tag from 'primevue/tag'
+import api from '../api'
+import { hasPerm } from '../store/auth'
+
+const MENU = 'USER'
+
+const userTypes = ['OWNER', 'SUPER_ADMIN', 'ADMIN', 'USER']
+
+const rows = ref([])
+const loading = ref(false)
+const dialogVisible = ref(false)
+const saving = ref(false)
+const error = ref('')
+const editingId = ref(null)
+
+const emptyForm = () => ({
+  name: '',
+  email: '',
+  password: '',
+  type: 'USER',
+  active: true,
+})
+
+const form = ref(emptyForm())
+
+const pwDialog = ref(false)
+const pwSaving = ref(false)
+const pwError = ref('')
+const pwTarget = ref(null)
+const pwInput = ref('')
+
+const typeSeverity = {
+  OWNER: 'danger',
+  SUPER_ADMIN: 'warn',
+  ADMIN: 'info',
+  USER: 'secondary',
+}
+
+async function load() {
+  loading.value = true
+  try {
+    const res = await api.get('/users')
+    rows.value = res.data?.data ?? []
+  } finally {
+    loading.value = false
+  }
+}
+
+function openAdd() {
+  editingId.value = null
+  form.value = emptyForm()
+  error.value = ''
+  dialogVisible.value = true
+}
+
+function openEdit(row) {
+  editingId.value = row.id
+  form.value = {
+    name: row.name,
+    email: row.email,
+    password: '',
+    type: row.type,
+    active: row.active,
+  }
+  error.value = ''
+  dialogVisible.value = true
+}
+
+async function save() {
+  saving.value = true
+  error.value = ''
+  try {
+    const payload = { ...form.value }
+    if (editingId.value && !payload.password) delete payload.password
+    if (editingId.value) {
+      await api.put(`/users/${editingId.value}`, payload)
+    } else {
+      await api.post('/users', payload)
+    }
+    dialogVisible.value = false
+    await load()
+  } catch (e) {
+    error.value = e.response?.data?.error || e.message || 'Gagal menyimpan'
+  } finally {
+    saving.value = false
+  }
+}
+
+async function remove(row) {
+  if (!confirm(`Hapus user "${row.name}"?`)) return
+  try {
+    await api.delete(`/users/${row.id}`)
+    await load()
+  } catch (e) {
+    alert(e.response?.data?.error || e.message || 'Gagal menghapus')
+  }
+}
+
+function openPassword(row) {
+  pwTarget.value = row
+  pwInput.value = ''
+  pwError.value = ''
+  pwDialog.value = true
+}
+
+async function savePassword() {
+  pwSaving.value = true
+  pwError.value = ''
+  try {
+    await api.put(`/users/${pwTarget.value.id}/password`, { password: pwInput.value })
+    pwDialog.value = false
+  } catch (e) {
+    pwError.value = e.response?.data?.error || e.message || 'Gagal mengubah password'
+  } finally {
+    pwSaving.value = false
+  }
+}
+
+onMounted(load)
+</script>
+
+<template>
+  <div style="display: flex; align-items: center; justify-content: space-between">
+    <div>
+      <h1 class="page-title">Users</h1>
+      <p class="page-subtitle">Pengelolaan pengguna & tipe akses</p>
+    </div>
+    <Button v-if="hasPerm(MENU, 'A')" label="Tambah User" icon="pi pi-plus" @click="openAdd" />
+  </div>
+
+  <div class="p-card">
+    <DataTable
+      :value="rows"
+      :loading="loading"
+      stripedRows
+      size="small"
+      paginator
+      :rows="10"
+      :rowsPerPageOptions="[10, 25, 50]"
+    >
+      <Column field="name" header="Nama" />
+      <Column field="email" header="Email" />
+      <Column header="Tipe" style="width: 140px">
+        <template #body="{ data }">
+          <Tag :severity="typeSeverity[data.type] || 'secondary'" :value="data.type" />
+        </template>
+      </Column>
+      <Column header="Status" style="width: 100px">
+        <template #body="{ data }">
+          <Tag :severity="data.active ? 'success' : 'secondary'" :value="data.active ? 'Aktif' : 'Nonaktif'" />
+        </template>
+      </Column>
+      <Column header="Aksi" style="width: 190px">
+        <template #body="{ data }">
+          <div style="display: flex; gap: 0.35rem">
+            <Button v-if="hasPerm(MENU, 'E')" icon="pi pi-pencil" severity="secondary" rounded text size="small" @click="openEdit(data)" />
+            <Button v-if="hasPerm(MENU, 'E')" icon="pi pi-key" severity="info" rounded text size="small" @click="openPassword(data)" title="Ganti password" />
+            <Button v-if="hasPerm(MENU, 'D')" icon="pi pi-trash" severity="danger" rounded text size="small" @click="remove(data)" />
+          </div>
+        </template>
+      </Column>
+    </DataTable>
+  </div>
+
+  <Dialog
+    v-model:visible="dialogVisible"
+    :header="editingId ? 'Edit User' : 'Tambah User'"
+    :style="{ width: '480px' }"
+    modal
+  >
+    <form @submit.prevent="save">
+      <div class="dialog-form">
+        <div class="p-field">
+          <label for="name">Nama *</label>
+          <InputText id="name" v-model="form.name" fluid />
+        </div>
+        <div class="p-field">
+          <label for="email">Email *</label>
+          <InputText id="email" v-model="form.email" type="email" fluid />
+        </div>
+        <div class="p-field">
+          <label for="password">{{ editingId ? 'Password (kosongkan jika tidak diubah)' : 'Password *' }}</label>
+          <Password id="password" v-model="form.password" :feedback="false" toggleMask fluid />
+        </div>
+        <div style="display: flex; gap: 1rem">
+          <div class="p-field" style="flex: 1">
+            <label for="type">Tipe</label>
+            <Select id="type" v-model="form.type" :options="userTypes" fluid />
+          </div>
+          <div class="p-field" style="flex: 1; display: flex; align-items: center">
+            <label for="active" style="display: flex; align-items: center; gap: 0.5rem">
+              <input id="active" v-model="form.active" type="checkbox" />
+              Aktif
+            </label>
+          </div>
+        </div>
+        <p v-if="error" style="color: var(--p-red-600); margin: 0; font-size: 0.85rem">{{ error }}</p>
+      </div>
+      <div class="dialog-footer">
+        <Button type="button" label="Batal" severity="secondary" @click="dialogVisible = false" />
+        <Button type="submit" label="Simpan" :loading="saving" />
+      </div>
+    </form>
+  </Dialog>
+
+  <Dialog
+    v-model:visible="pwDialog"
+    :header="`Ganti Password: ${pwTarget?.name ?? ''}`"
+    :style="{ width: '420px' }"
+    modal
+  >
+    <form @submit.prevent="savePassword">
+      <div class="dialog-form">
+        <div class="p-field">
+          <label for="pw">Password Baru *</label>
+          <Password id="pw" v-model="pwInput" :feedback="false" toggleMask fluid />
+        </div>
+        <p v-if="pwError" style="color: var(--p-red-600); margin: 0; font-size: 0.85rem">{{ pwError }}</p>
+      </div>
+      <div class="dialog-footer">
+        <Button type="button" label="Batal" severity="secondary" @click="pwDialog = false" />
+        <Button type="submit" label="Simpan" :loading="pwSaving" />
+      </div>
+    </form>
+  </Dialog>
+</template>
