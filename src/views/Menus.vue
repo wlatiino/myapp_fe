@@ -1,14 +1,14 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { ref } from 'vue'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import InputNumber from 'primevue/inputnumber'
 import MultiSelect from 'primevue/multiselect'
-import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import Dialog from 'primevue/dialog'
 import Tag from 'primevue/tag'
 import api from '../api'
+import DataListView from '../components/DataListView.vue'
 import { hasPerm } from '../store/auth'
 
 const MENU = 'MENU'
@@ -22,8 +22,7 @@ const permOptions = [
   { label: 'X - Ekspor', value: 'X' },
 ]
 
-const rows = ref([])
-const loading = ref(false)
+const list = ref(null)
 const dialogVisible = ref(false)
 const saving = ref(false)
 const error = ref('')
@@ -42,13 +41,7 @@ const emptyForm = () => ({
 const form = ref(emptyForm())
 
 async function load() {
-  loading.value = true
-  try {
-    const res = await api.get('/menus')
-    rows.value = res.data?.data ?? []
-  } finally {
-    loading.value = false
-  }
+  list.value?.reload()
 }
 
 function openAdd() {
@@ -105,8 +98,6 @@ async function remove(row) {
     alert(e.response?.data?.error || e.message || 'Gagal menghapus')
   }
 }
-
-onMounted(load)
 </script>
 
 <template>
@@ -115,56 +106,49 @@ onMounted(load)
       <h1 class="page-title">Menu</h1>
       <p class="page-subtitle">Daftar menu aplikasi & template hak akses</p>
     </div>
-    <Button v-if="hasPerm(MENU, 'A')" label="Tambah Menu" icon="pi pi-plus" @click="openAdd" />
   </div>
 
-  <div class="p-card">
-    <DataTable
-      :value="rows"
-      :loading="loading"
-      stripedRows
-      size="small"
-      paginator
-      :rows="10"
-      :rowsPerPageOptions="[10, 25, 50]"
-    >
-      <Column field="name" header="Kode" style="width: 150px" />
-      <Column field="label" header="Label" />
-      <Column header="Permission" >
-        <template #body="{ data }">
-          <div v-if="data.permission?.length" style="display: flex; gap: 0.25rem; flex-wrap: wrap">
-            <Tag v-for="p in data.permission" :key="p" :value="p" severity="info" style="min-width: 1.5rem; justify-content: center" />
-          </div>
-          <span v-else style="color: var(--p-surface-400)">—</span>
-        </template>
-      </Column>
-      <Column field="sort_order" header="Urutan" style="width: 90px">
-        <template #body="{ data }">
-          <div class="text-right">{{ data.sort_order }}</div>
-        </template>
-      </Column>
-      <Column header="Batas Edit" style="width: 130px">
-        <template #body="{ data }">
-          <span class="text-right">
-            {{ data.back_date }} / {{ data.forward_date }} hari
-          </span>
-        </template>
-      </Column>
-      <Column header="Status" style="width: 100px">
-        <template #body="{ data }">
-          <Tag :severity="data.active ? 'success' : 'secondary'" :value="data.active ? 'Aktif' : 'Nonaktif'" />
-        </template>
-      </Column>
-      <Column header="Aksi" style="width: 140px">
-        <template #body="{ data }">
-          <div style="display: flex; gap: 0.35rem">
-            <Button v-if="hasPerm(MENU, 'E')" icon="pi pi-pencil" severity="secondary" rounded text size="small" @click="openEdit(data)" />
-            <Button v-if="hasPerm(MENU, 'D')" icon="pi pi-trash" severity="danger" rounded text size="small" @click="remove(data)" />
-          </div>
-        </template>
-      </Column>
-    </DataTable>
-  </div>
+  <DataListView ref="list" resource="menus">
+    <template #actions>
+      <Button v-if="hasPerm(MENU, 'A')" label="Tambah Menu" icon="pi pi-plus" @click="openAdd" />
+    </template>
+
+    <Column field="name" header="Kode" sortable style="width: 150px" />
+    <Column field="label" header="Label" sortable />
+    <Column header="Permission">
+      <template #body="{ data }">
+        <div v-if="data.permission?.length" style="display: flex; gap: 0.25rem; flex-wrap: wrap">
+          <Tag v-for="p in data.permission" :key="p" :value="p" severity="info" style="min-width: 1.5rem; justify-content: center" />
+        </div>
+        <span v-else style="color: var(--p-surface-400)">—</span>
+      </template>
+    </Column>
+    <Column field="sort_order" header="Urutan" sortable style="width: 90px">
+      <template #body="{ data }">
+        <div class="text-right">{{ data.sort_order }}</div>
+      </template>
+    </Column>
+    <Column field="back_date" header="Batas Edit" sortable style="width: 130px">
+      <template #body="{ data }">
+        <span class="text-right">
+          {{ data.back_date }} / {{ data.forward_date }} hari
+        </span>
+      </template>
+    </Column>
+    <Column field="active" header="Status" sortable style="width: 100px">
+      <template #body="{ data }">
+        <Tag :severity="data.active ? 'success' : 'secondary'" :value="data.active ? 'Aktif' : 'Nonaktif'" />
+      </template>
+    </Column>
+    <Column header="Aksi" style="width: 140px">
+      <template #body="{ data }">
+        <div style="display: flex; gap: 0.35rem">
+          <Button v-if="hasPerm(MENU, 'E')" icon="pi pi-pencil" severity="secondary" rounded text size="small" @click="openEdit(data)" />
+          <Button v-if="hasPerm(MENU, 'D')" icon="pi pi-trash" severity="danger" rounded text size="small" @click="remove(data)" />
+        </div>
+      </template>
+    </Column>
+  </DataListView>
 
   <Dialog
     v-model:visible="dialogVisible"

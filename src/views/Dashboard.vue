@@ -11,12 +11,13 @@ const stats = ref({
 onMounted(async () => {
   try {
     const [products, partners] = await Promise.all([
-      api.get('/products'),
-      api.get('/partners'),
+      // GET list dipaginasi backend (default limit 10); nilai stok butuh semua baris
+      api.get('/products', { params: { limit: 1000 } }),
+      api.get('/partners', { params: { limit: 1000 } }),
     ])
     const list = products.data?.data ?? []
-    stats.value.products = list.length
-    stats.value.partners = partners.data?.data?.length ?? 0
+    stats.value.products = Number(products.data?.total ?? list.length)
+    stats.value.partners = Number(partners.data?.total ?? partners.data?.data?.length ?? 0)
     stats.value.stockValue = list.reduce((s, p) => s + p.qty * p.avg_cost, 0)
   } catch (e) {
     console.error(e)

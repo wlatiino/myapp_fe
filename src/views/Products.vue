@@ -1,20 +1,19 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import InputNumber from 'primevue/inputnumber'
-import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import Dialog from 'primevue/dialog'
 import Select from 'primevue/select'
 import Tag from 'primevue/tag'
-import api from '../api'
+import DataListView from '../components/DataListView.vue'
 import { hasPerm } from '../store/auth'
+import api from '../api'
 
 const MENU = 'PRODUCT'
 
-const rows = ref([])
-const loading = ref(false)
+const list = ref(null)
 const dialogVisible = ref(false)
 const saving = ref(false)
 const error = ref('')
@@ -39,13 +38,7 @@ const idr = new Intl.NumberFormat('id-ID', {
 })
 
 async function load() {
-  loading.value = true
-  try {
-    const res = await api.get('/products')
-    rows.value = res.data?.data ?? []
-  } finally {
-    loading.value = false
-  }
+  list.value?.reload()
 }
 
 function openAdd() {
@@ -107,53 +100,46 @@ onMounted(load)
       <h1 class="page-title">Produk</h1>
       <p class="page-subtitle">Katalog produk & harga</p>
     </div>
-    <Button v-if="hasPerm(MENU, 'A')" label="Tambah Produk" icon="pi pi-plus" @click="openAdd" />
   </div>
 
-  <div class="p-card">
-    <DataTable
-      :value="rows"
-      :loading="loading"
-      stripedRows
-      size="small"
-      paginator
-      :rows="10"
-      :rowsPerPageOptions="[10, 25, 50]"
-    >
-      <Column field="sku" header="SKU" style="width: 120px" />
-      <Column field="name" header="Nama" />
-      <Column field="category" header="Kategori" />
-      <Column field="unit" header="Satuan" style="width: 90px" />
-      <Column header="Harga Beli" style="width: 130px">
-        <template #body="{ data }">
-          <div class="text-right">{{ idr.format(data.price_buy) }}</div>
-        </template>
-      </Column>
-      <Column header="Harga Jual" style="width: 130px">
-        <template #body="{ data }">
-          <div class="text-right">{{ idr.format(data.price_sell) }}</div>
-        </template>
-      </Column>
-      <Column header="Stok" style="width: 90px">
-        <template #body="{ data }">
-          <div class="text-right"><b>{{ data.qty }}</b></div>
-        </template>
-      </Column>
-      <Column header="Status" style="width: 100px">
-        <template #body="{ data }">
-          <Tag :severity="data.active ? 'success' : 'secondary'" :value="data.active ? 'Aktif' : 'Nonaktif'" />
-        </template>
-      </Column>
-      <Column header="Aksi" style="width: 140px">
-        <template #body="{ data }">
-          <div style="display: flex; gap: 0.35rem">
-            <Button v-if="hasPerm(MENU, 'E')" icon="pi pi-pencil" severity="secondary" rounded text size="small" @click="openEdit(data)" />
-            <Button v-if="hasPerm(MENU, 'D')" icon="pi pi-trash" severity="danger" rounded text size="small" @click="remove(data)" />
-          </div>
-        </template>
-      </Column>
-    </DataTable>
-  </div>
+  <DataListView ref="list" resource="products">
+    <template #actions>
+      <Button v-if="hasPerm(MENU, 'A')" label="Tambah Produk" icon="pi pi-plus" @click="openAdd" />
+    </template>
+
+    <Column field="sku" header="SKU" sortable style="width: 120px" />
+    <Column field="name" header="Nama" sortable />
+    <Column field="category" header="Kategori" sortable />
+    <Column field="unit" header="Satuan" sortable style="width: 90px" />
+    <Column field="price_buy" header="Harga Beli" sortable style="width: 130px">
+      <template #body="{ data }">
+        <div class="text-right">{{ idr.format(data.price_buy) }}</div>
+      </template>
+    </Column>
+    <Column field="price_sell" header="Harga Jual" sortable style="width: 130px">
+      <template #body="{ data }">
+        <div class="text-right">{{ idr.format(data.price_sell) }}</div>
+      </template>
+    </Column>
+    <Column field="qty" header="Stok" sortable style="width: 90px">
+      <template #body="{ data }">
+        <div class="text-right"><b>{{ data.qty }}</b></div>
+      </template>
+    </Column>
+    <Column field="active" header="Status" sortable style="width: 100px">
+      <template #body="{ data }">
+        <Tag :severity="data.active ? 'success' : 'secondary'" :value="data.active ? 'Aktif' : 'Nonaktif'" />
+      </template>
+    </Column>
+    <Column header="Aksi" style="width: 140px">
+      <template #body="{ data }">
+        <div style="display: flex; gap: 0.35rem">
+          <Button v-if="hasPerm(MENU, 'E')" icon="pi pi-pencil" severity="secondary" rounded text size="small" @click="openEdit(data)" />
+          <Button v-if="hasPerm(MENU, 'D')" icon="pi pi-trash" severity="danger" rounded text size="small" @click="remove(data)" />
+        </div>
+      </template>
+    </Column>
+  </DataListView>
 
   <Dialog
     v-model:visible="dialogVisible"

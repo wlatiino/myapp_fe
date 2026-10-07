@@ -14,7 +14,7 @@ const props = defineProps({
   visible: Boolean,
   mode: { type: String, required: true }, // 'sales' | 'purchase'
   title: { type: String, required: true },
-  editingId: { type: Number, default: null }, // null = create, angka = edit header
+  editingId: { type: Number, default: null }, // null = create, angka = edit (header + item)
   products: { type: Array, default: () => [] },
   partners: { type: Array, default: () => [] },
 })
@@ -78,8 +78,6 @@ const itemsTotal = computed(() =>
   form.value.items.reduce((s, it) => s + lineTotal(it), 0),
 )
 
-const canEditItems = computed(() => props.editingId === null)
-
 const productOptions = computed(() =>
   props.products
     .filter((p) => p.active)
@@ -142,11 +140,13 @@ async function save() {
     error.value = 'Tanggal wajib diisi'
     return
   }
-  if (canEditItems.value) {
-    if (form.value.items.length === 0 || form.value.items.some((it) => !it.product_id)) {
-      error.value = 'Minimal satu item dengan produk wajib dipilih'
-      return
-    }
+  if (form.value.items.length === 0 || form.value.items.some((it) => !it.product_id)) {
+    error.value = 'Minimal satu item dengan produk wajib dipilih'
+    return
+  }
+  if (form.value.items.some((it) => !(Number(it.qty) > 0))) {
+    error.value = 'Qty setiap item harus lebih besar dari 0'
+    return
   }
   saving.value = true
   error.value = ''
@@ -211,7 +211,6 @@ async function save() {
         </div>
       </div>
 
-      <template v-if="canEditItems">
         <DataTable :value="form.items" size="small" responsive-layout="scroll">
           <Column header="Produk" style="min-width: 260px">
             <template #body="{ data }">
@@ -249,29 +248,6 @@ async function save() {
           </Column>
         </DataTable>
         <Button type="button" label="Tambah Item" icon="pi pi-plus" severity="secondary" text @click="addItem" class="mb-2" />
-      </template>
-
-      <template v-else>
-        <div class="mb-2" style="font-size: 0.85rem; color: var(--p-surface-500)">
-          Edit hanya mengubah data header; item & stok tidak diubah.
-        </div>
-        <DataTable :value="form.items" size="small">
-          <Column header="Produk">
-            <template #body="{ data }">
-              {{ productById(data.product_id)?.name ?? `Produk #${data.product_id}` }}
-            </template>
-          </Column>
-          <Column field="qty" header="Qty" style="width: 100px">
-            <template #body="{ data }">{{ data.qty }}</template>
-          </Column>
-          <Column field="price" header="Harga" style="width: 140px">
-            <template #body="{ data }">{{ Number(data.price).toLocaleString('id-ID') }}</template>
-          </Column>
-          <Column header="Subtotal" style="width: 140px">
-            <template #body="{ data }">{{ lineTotal(data).toLocaleString('id-ID') }}</template>
-          </Column>
-        </DataTable>
-      </template>
 
       <div style="display: flex; justify-content: flex-end; align-items: center; margin-top: 0.75rem">
         <div style="font-size: 1.05rem; font-weight: 700">

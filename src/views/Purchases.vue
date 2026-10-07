@@ -1,20 +1,23 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import Button from 'primevue/button'
-import DataTable from 'primevue/datatable'
+import DatePicker from 'primevue/datepicker'
 import Column from 'primevue/column'
+import DataTable from 'primevue/datatable'
 import Dialog from 'primevue/dialog'
 import Tag from 'primevue/tag'
 import api from '../api'
+import DataListView from '../components/DataListView.vue'
 import { hasPerm } from '../store/auth'
 import TransactionEditor from '../components/TransactionEditor.vue'
 
 const MENU = 'PURCHASE'
 
-const rows = ref([])
+const list = ref(null)
 const products = ref([])
 const partners = ref([])
-const loading = ref(false)
+const from = ref(null)
+const to = ref(null)
 
 const editorVisible = ref(false)
 const editingId = ref(null)
@@ -34,21 +37,31 @@ const idr = new Intl.NumberFormat('id-ID', {
   maximumFractionDigits: 0,
 })
 
-async function load() {
-  loading.value = true
-  try {
-    const [purch, prods, parts] = await Promise.all([
-      api.get('/purchases'),
-      api.get('/products'),
-      api.get('/partners'),
-    ])
-    rows.value = purch.data?.data ?? []
-    products.value = prods.data?.data ?? []
-    partners.value = parts.data?.data ?? []
-  } finally {
-    loading.value = false
-  }
+function fmtYMD(d) {
+  return d ? new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10) : ''
 }
+
+const extra = computed(() => ({
+  from: from.value ? fmtYMD(from.value) : '',
+  to: to.value ? fmtYMD(to.value) : '',
+}))
+
+async function loadAux() {
+  const [prods, parts] = await Promise.all([
+    // GET list dipaginasi backend (default limit 10) — isi dropdown butuh semuanya
+    api.get('/products', { params: { limit: 1000 } }),
+    api.get('/partners', { params: { limit: 1000 } }),
+  ])
+  products.value = prods.data?.data ?? []
+  partners.value = parts.data?.data ?? []
+}
+
+function reloadAll() {
+  list.value?.reload()
+  loadAux()
+}
+
+onMounted(loadAux)
 
 function openCreate() {
   editingId.value = null
@@ -56,6 +69,10 @@ function openCreate() {
 }
 
 function openEdit(row) {
+  if (row.status !== 'ACTIVE') {
+    alert('Dokumen berstatus VOID tidak bisa diedit')
+    return
+  }
   editingId.value = row.id
   editorVisible.value = true
 }
@@ -79,7 +96,7 @@ async function doVoid(row) {
   if (!confirm(`Void pembelian "${row.no}"?`)) return
   try {
     await api.post(`/purchases/${row.id}/void`)
-    await load()
+    reloadAll()
   } catch (e) {
     alert(e.response?.data?.error || e.message || 'Gagal void')
   }
@@ -89,7 +106,7 @@ async function remove(row) {
   if (!confirm(`Hapus pembelian "${row.no}"?`)) return
   try {
     await api.delete(`/purchases/${row.id}`)
-    await load()
+    reloadAll()
   } catch (e) {
     alert(e.response?.data?.error || e.message || 'Gagal menghapus')
   }
@@ -99,8 +116,6 @@ function fmtDate(v) {
   if (!v) return '-'
   return new Date(v).toLocaleDateString('id-ID')
 }
-
-onMounted(load)
 </script>
 
 <template>
@@ -113,17 +128,18 @@ onMounted(load)
   </div>
 
   <div class="p-card">
-    <DataTable
-      :value="rows"
-      :loading="loading"
-      stripedRows
-      size="small"
-      paginator
-      :rows="10"
-      :rowsPerPageOptions="[10, 25, 50]"
+    <DataListView
+      ref="list"
+      resource="purchases"
+      :extra="extra"
+      :default-sort="[{ field: 'transaction_date', order: -1 }, { field: 'id', order: -1 }]"
     >
-      <Column field="no" header="No. Dokumen" />
-      <Column header="Tanggal" style="width: 110px">
+      <template #filters>
+        <DatePicker v-model="from" showIcon dateFormat="dd/mm/yy" placeholder="Dari tanggal" />
+        <DatePicker v-model="to" showIcon dateFormat="dd/mm/yy" placeholder="Sampai tanggal" />
+      </template>
+      <Column field="no" header="No. Dokumen" sortable />
+      <Column field="transaction_date" header="Tanggal" sortable style="width: 110px">
         <template #body="{ data }">{{ fmtDate(data.transaction_date) }}</template>
       </Column>
       <Column header="Pemasok">
@@ -131,12 +147,12 @@ onMounted(load)
           {{ data.partner_id ? partnerMap[data.partner_id] || '—' : 'Umum' }}
         </template>
       </Column>
-      <Column header="Total" style="width: 130px">
+      <Column field="total" header="Total" sortable style="width: 130px">
         <template #body="{ data }">
           <div class="text-right" style="font-weight: 600">{{ idr.format(data.total) }}</div>
         </template>
       </Column>
-      <Column header="Status" style="width: 100px">
+      <Column field="status" header="Status" sortable style="width: 100px">
         <template #body="{ data }">
           <Tag :severity="data.status === 'ACTIVE' ? 'success' : 'secondary'" :value="data.status" />
         </template>
@@ -146,7 +162,7 @@ onMounted(load)
         <template #body="{ data }">
           <div style="display: flex; gap: 0.35rem">
             <Button icon="pi pi-eye" severity="secondary" rounded text size="small" @click="showDetail(data)" title="Detail" />
-            <Button v-if="hasPerm(MENU, 'E')" icon="pi pi-pencil" severity="secondary" rounded text size="small" @click="openEdit(data)" title="Edit header" />
+            <Button v-if="hasPerm(MENU, 'E')" icon="pi pi-pencil" severity="secondary" rounded text size="small" @click="openEdit(data)" title="Edit" />
             <Button
               v-if="data.status === 'ACTIVE' && hasPerm(MENU, 'E')"
               icon="pi pi-ban"
@@ -160,7 +176,7 @@ onMounted(load)
           </div>
         </template>
       </Column>
-    </DataTable>
+    </DataListView>
   </div>
 
   <TransactionEditor
@@ -170,7 +186,7 @@ onMounted(load)
     :editing-id="editingId"
     :products="products"
     :partners="partners"
-    @saved="load"
+    @saved="reloadAll"
   />
 
   <Dialog

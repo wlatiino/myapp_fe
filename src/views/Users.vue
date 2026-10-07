@@ -1,22 +1,21 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { ref } from 'vue'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Password from 'primevue/password'
-import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import Dialog from 'primevue/dialog'
 import Select from 'primevue/select'
 import Tag from 'primevue/tag'
 import api from '../api'
+import DataListView from '../components/DataListView.vue'
 import { hasPerm } from '../store/auth'
 
 const MENU = 'USER'
 
 const userTypes = ['OWNER', 'SUPER_ADMIN', 'ADMIN', 'USER']
 
-const rows = ref([])
-const loading = ref(false)
+const list = ref(null)
 const dialogVisible = ref(false)
 const saving = ref(false)
 const error = ref('')
@@ -46,13 +45,7 @@ const typeSeverity = {
 }
 
 async function load() {
-  loading.value = true
-  try {
-    const res = await api.get('/users')
-    rows.value = res.data?.data ?? []
-  } finally {
-    loading.value = false
-  }
+  list.value?.reload()
 }
 
 function openAdd() {
@@ -124,8 +117,6 @@ async function savePassword() {
     pwSaving.value = false
   }
 }
-
-onMounted(load)
 </script>
 
 <template>
@@ -134,42 +125,35 @@ onMounted(load)
       <h1 class="page-title">Users</h1>
       <p class="page-subtitle">Pengelolaan pengguna & tipe akses</p>
     </div>
-    <Button v-if="hasPerm(MENU, 'A')" label="Tambah User" icon="pi pi-plus" @click="openAdd" />
   </div>
 
-  <div class="p-card">
-    <DataTable
-      :value="rows"
-      :loading="loading"
-      stripedRows
-      size="small"
-      paginator
-      :rows="10"
-      :rowsPerPageOptions="[10, 25, 50]"
-    >
-      <Column field="name" header="Nama" />
-      <Column field="email" header="Email" />
-      <Column header="Tipe" style="width: 140px">
-        <template #body="{ data }">
-          <Tag :severity="typeSeverity[data.type] || 'secondary'" :value="data.type" />
-        </template>
-      </Column>
-      <Column header="Status" style="width: 100px">
-        <template #body="{ data }">
-          <Tag :severity="data.active ? 'success' : 'secondary'" :value="data.active ? 'Aktif' : 'Nonaktif'" />
-        </template>
-      </Column>
-      <Column header="Aksi" style="width: 190px">
-        <template #body="{ data }">
-          <div style="display: flex; gap: 0.35rem">
-            <Button v-if="hasPerm(MENU, 'E')" icon="pi pi-pencil" severity="secondary" rounded text size="small" @click="openEdit(data)" />
-            <Button v-if="hasPerm(MENU, 'E')" icon="pi pi-key" severity="info" rounded text size="small" @click="openPassword(data)" title="Ganti password" />
-            <Button v-if="hasPerm(MENU, 'D')" icon="pi pi-trash" severity="danger" rounded text size="small" @click="remove(data)" />
-          </div>
-        </template>
-      </Column>
-    </DataTable>
-  </div>
+  <DataListView ref="list" resource="users">
+    <template #actions>
+      <Button v-if="hasPerm(MENU, 'A')" label="Tambah User" icon="pi pi-plus" @click="openAdd" />
+    </template>
+
+    <Column field="name" header="Nama" sortable />
+    <Column field="email" header="Email" sortable />
+    <Column field="type" header="Tipe" sortable style="width: 140px">
+      <template #body="{ data }">
+        <Tag :severity="typeSeverity[data.type] || 'secondary'" :value="data.type" />
+      </template>
+    </Column>
+    <Column field="active" header="Status" sortable style="width: 100px">
+      <template #body="{ data }">
+        <Tag :severity="data.active ? 'success' : 'secondary'" :value="data.active ? 'Aktif' : 'Nonaktif'" />
+      </template>
+    </Column>
+    <Column header="Aksi" style="width: 190px">
+      <template #body="{ data }">
+        <div style="display: flex; gap: 0.35rem">
+          <Button v-if="hasPerm(MENU, 'E')" icon="pi pi-pencil" severity="secondary" rounded text size="small" @click="openEdit(data)" />
+          <Button v-if="hasPerm(MENU, 'E')" icon="pi pi-key" severity="info" rounded text size="small" @click="openPassword(data)" title="Ganti password" />
+          <Button v-if="hasPerm(MENU, 'D')" icon="pi pi-trash" severity="danger" rounded text size="small" @click="remove(data)" />
+        </div>
+      </template>
+    </Column>
+  </DataListView>
 
   <Dialog
     v-model:visible="dialogVisible"

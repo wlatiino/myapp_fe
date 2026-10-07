@@ -17,7 +17,7 @@ const menuMap = {
   USER: { to: '/users', icon: 'pi pi-user' },
   MENU: { to: '/menus', icon: 'pi pi-list' },
   USER_MENUS: { path: '/user-menus', icon: 'pi pi-lock' },
-  SYSTEM_TYPES: { path: '/system-types', icon: 'pi pi-sliders-h' },
+  SYSTEM_TYPES: { to: '/system-types', icon: 'pi pi-sliders-h' },
   PRODUCT: { to: '/products', icon: 'pi pi-box' },
   BISNIS_PARTNER: { to: '/partners', icon: 'pi pi-users' },
   SALES: { to: '/sales', icon: 'pi pi-shopping-cart' },
